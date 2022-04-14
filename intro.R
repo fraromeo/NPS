@@ -68,7 +68,7 @@ plot(games$year[games$year > 1990], games$average[games$year > 1990])
 indexes.shapiro = sample(dim(games)[1], 5000)
 shapiro.test(games$average[indexes.shapiro]) #NOT GAUSSIAN -> YES
 
-# Filter games with single category -> just to try
+#### Filter games with single category -> just to try ####
 games$cnt<-unlist(lapply(str_split(games$category, ","), length))
 single_cat<-games %>% 
   filter(games$cnt==1)
@@ -83,6 +83,10 @@ top_cat<-single_cat %>%
 
 top_cat
 games_df<-games %>% filter(category %in% top_cat$category)
+
+#### One Hot Encoding ####
+
+
 
 library(hrbrthemes)
 library(viridis)
@@ -119,4 +123,6 @@ games_df %>%
 
 pairs(games[games$playingtime < 2000, c('minplayers', 'maxplayers', 'playingtime', 'average')])
 library(GGally)
-ggpairs(games[,c('minplayers', 'maxplayers', 'playingtime', 'average')]) 
+ggpairs(games[,c('numratings', 'averageweight', 'playingtime', 'average')]) 
+
+
