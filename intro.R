@@ -1,10 +1,12 @@
 rm (list = ls())
+tilda = '~'
 
 # Libraries
 library(tidyverse)
 library(tidytext)
 library(caret)
 library(cowplot)
+library(dplyr)
 
 details <-read.csv('games_detailed_info.csv') %>% 
           mutate(boardgamecategory = gsub("\\[", "", boardgamecategory), boardgamecategory = gsub("\\]", "", boardgamecategory), boardgamecategory = gsub(" \\/ ", "", boardgamecategory), boardgamecategory=gsub("\\/", "", boardgamecategory), boardgamecategory=gsub("'", "", boardgamecategory), 
@@ -12,8 +14,6 @@ details <-read.csv('games_detailed_info.csv') %>%
                  boardgamefamily = gsub("\\[", "", boardgamefamily), boardgamefamily = gsub("\\]", "", boardgamefamily), boardgamefamily = gsub(" \\/ ", "", boardgamefamily), boardgamefamily=gsub("\\/", "", boardgamefamily), boardgamefamily=gsub("'", "", boardgamefamily),
                  boardgamepublisher = gsub("\\[", "", boardgamepublisher), boardgamepublisher = gsub("\\]", "", boardgamepublisher), boardgamepublisher = gsub(" \\/ ", "", boardgamepublisher), boardgamepublisher=gsub("\\/", "", boardgamepublisher), boardgamefamily=gsub("'", "", boardgamepublisher))
 glimpse(details)
-
-
 summary(details)
 
 
@@ -35,8 +35,7 @@ games[c("median")] <- NULL
 names(games)
 
 games = games %>% 
-  rename(
-    year = yearpublished,
+  dplyr::rename(year = yearpublished,
     category = boardgamecategory,
     mechanic = boardgamemechanic,
     family = boardgamefamily,
@@ -47,8 +46,6 @@ games = games %>%
     name = primary
   )
 
-games <- games %>%
-  filter(!is.na(category))
 
 names(games)
 
@@ -57,72 +54,85 @@ zero.year = games$year == 0
 games[zero.year ,c('name')] # they are clearly more recent -> not trustworthy
 games = games[!zero.year,]
 
-#### Exploration #### 
-indexes.shuffle <- sample(dim(games)[1])
-plot(games$average[indexes.shuffle])
-
-plot(games$bayesaverage, games$average)
-plot(games$averageweight, games$average)
-plot(games$year[games$year > 1990], games$average[games$year > 1990])
-
-indexes.shapiro = sample(dim(games)[1], 5000)
-shapiro.test(games$average[indexes.shapiro]) #NOT GAUSSIAN -> YES
-
-#### Filter games with single category -> just to try ####
-games$cnt<-unlist(lapply(str_split(games$category, ","), length))
-single_cat<-games %>% 
-  filter(games$cnt==1)
-glimpse(unique(single_cat$category))
-
-top_cat<-single_cat %>% 
-  filter(!is.na(category)) %>% 
-  group_by(category) %>% 
-  tally() %>% 
-  top_n(74, n) %>% 
-  arrange(desc(n))
-
-top_cat
-games_df<-games %>% filter(category %in% top_cat$category)
 
 #### One Hot Encoding ####
 
+games <- games %>%
+  filter(!is.na(category))
+
+games.sep1 <- games %>%
+  separate(category, c('cat1', 'cat2', 'cat3'), sep = ", ") %>%
+  mutate(cat12 = if_else(is.na(cat1), 'Not Av', cat1)) %>%
+  select(cat12)
+
+games.sep2 <- games %>%
+  separate(category, c('cat1', 'cat2', 'cat3'), sep = ", ") %>%
+  mutate(cat22 = if_else(is.na(cat2), 'Not Av', cat2)) %>%
+  select(cat22)
+
+games.sep3 <- games %>%
+  separate(category, c('cat1', 'cat2', 'cat3'), sep = ", ") %>%
+  mutate(cat32 = if_else(is.na(cat3), 'Not Av', cat3)) %>%
+  select(cat32)
+
+remove_first5 <- function(name) {
+  new_name = substring(name, 6)
+  return (new_name)
+}
+
+ChangeColnames <- function(x) {
+  colnames(x) <- remove_first5(colnames(x))
+  x
+}
+
+catmat1 <- model.matrix(~cat12-1, games.sep1)
+catmat1 <- ChangeColnames(catmat1)
+                                               
+catmat2 <- model.matrix(~cat22-1, games.sep2)
+catmat2 <- ChangeColnames(catmat2)
+
+catmat3 <- model.matrix(~cat32-1, games.sep3)
+catmat3 <- ChangeColnames(catmat3)
+
+df.cat1 <- data.frame(catmat1)
+df.cat1$id <- games$id
+
+df.cat2 <- data.frame(catmat2)
+df.cat2$id <- games$id
 
 
-library(hrbrthemes)
-library(viridis)
+df.cat3 <- data.frame(catmat3)
+df.cat3$id <- games$id
 
-# Boxplot + jitter
-games_df %>%
-  ggplot( aes(x=category, y=average, fill=category)) +
-  geom_boxplot() +
-  scale_fill_viridis(discrete = TRUE, alpha=0.6) +
-  geom_jitter(color="black", size=0.4, alpha=0.9) +
-  theme_ipsum() +
-  theme(
-    legend.position="none",
-    plot.title = element_text(size=11)
-  ) +
-  ggtitle("A boxplot with jitter") +
-  xlab("")
-
-# Violin basic
-games_df %>%
-  ggplot( aes(x=category, y=average, fill=category)) +
-  geom_violin() +
-  scale_fill_viridis(discrete = TRUE, alpha=0.6, option="A") +
-  geom_jitter(color="black", size=0.4, alpha=0.9) +
-  theme_ipsum() +
-  theme(
-    legend.position="none",
-    plot.title = element_text(size=11)
-  ) +
-  ggtitle("Violin chart") +
-  xlab("")
-
-# Scatterplot
-
-pairs(games[games$playingtime < 2000, c('minplayers', 'maxplayers', 'playingtime', 'average')])
-library(GGally)
-ggpairs(games[,c('numratings', 'averageweight', 'playingtime', 'average')]) 
+# add rownames as a column in each data.frame and bind rows
+dm <-bind_rows(df.cat1, 
+          df.cat2,
+          df.cat3
+          ) %>%
+  # evaluate following calls for each value in the rowname column
+  group_by(id) %>% 
+  # add all non-grouping variables
+  summarise_all(sum)
 
 
+##### JOIN GAMES AND CATEGORY DATASET ####
+
+dm$V1 <- NULL
+games <- merge(games,dm, by='id')
+games = games %>% 
+  rename(
+    Childrens.Game = X.Childrens.Game.
+  )
+
+games = games[, colSums(is.na(games)) != nrow(games)]
+
+
+tab = colSums(games[,c(31:106)])
+few_sample = names(tab)[tab < 73]
+
+games[,few_sample] <- NULL
+
+#games[,c(31:100)] <- factor(games[,c(31:100)])
+
+saveRDS(games, file='data.RDS')
+summary(games)
