@@ -50,7 +50,7 @@ games = games %>%
 names(games)
 
 #Games with published year = 0 -> fake
-zero.year = games$year == 0
+zero.year = games$year <= 0
 games[zero.year ,c('name')] # they are clearly more recent -> not trustworthy
 games = games[!zero.year,]
 
@@ -136,3 +136,25 @@ games[,few_sample] <- NULL
 
 saveRDS(games, file='data.RDS')
 summary(games)
+
+
+# further cleaning 
+games <- games[!games[,'numweights'] == 0,] # zero averageweight 
+
+
+# depth measure 
+
+bagplot_games <- bagplot(games[,c('averageweight','average')],depth_params = list(method = 'Tukey') )
+outlying_obs <- bagplot_games$pxy.outlier
+d <- depth(games[,c("averageweight","numratings","numweights","playingtime","minplayers","maxplayers")], method = 'Tukey' )
+hist(d)
+
+
+
+
+
+
+
+
+
+
