@@ -141,12 +141,58 @@ games <- games[!games[,'numweights'] == 0,] # zero averageweight
 saveRDS(games, file='data.RDS')
 
 
+### create table with commong categories 
+which(colnames(games) == 'Childrens.Game' | colnames(games) == 'Zombies')
+first_cat <- 31
+last_cat <- 100
+two_way_table <- matrix(nrow = last_cat - first_cat, ncol =last_cat - first_cat )
+dist_mat <- matrix(nrow = last_cat - first_cat, ncol = last_cat - first_cat)
+for (i in first_cat:last_cat){
+  for(j in first_cat:last_cat){
+    cat_rows <- which(games[,i] == 1)
+    
+    common <- length(which(games[cat_rows,j] == 1))
+    two_way_table[i-first_cat,j-first_cat] <- common
+    if (common == 0){
+      dist_mat[i-first_cat,j-first_cat] <- 2
+    }else{
+      dist_mat[i-first_cat,j-first_cat] <- 1/common
+    }
+  }
+}
+
+dist_mat <- as.dist(dist_mat)
+rownames(dist_mat) <- colnames(games[first_cat, last_cat])
+dendo <- hclust(dist_mat, method='complete')
+plot(dendo, main='complete', hang=-0.1, xlab='', labels=F, cex=0.6, sub='')
+rect.hclust(dendo, k=25) # reduce categories from 59 to 25 
 
 
+### ideas for cleaning the dataset: 
 
+# games with not available minage (also suggested_player_age seems to have only 0 votes)
+ind <- which(games$minage == 0) 
+hist(games$average)
+hist(games$average[-ind]) # very similar to the one of full dataset
+hist(games$average[ind] ) # high averages
+length(ind) # not so many if compared to nrows
 
+# games with "significant" reviews (https://jvanelteren.github.io/blog/2022/01/19/boardgames.html)
+ind <- which(games$numcomments/games$numratings < 0.2)
+hist(games$average)
+hist(games$average[-ind])
+hist(games$average[ind] )
+length(ind) #  not so many if compared to nrows
 
+# games with less than 1000 reviews (https://jvanelteren.github.io/blog/2022/01/19/boardgames.html)
 
+summary(games$numratings)
+ind <- which(games$numratings < 400) 
+length(ind)/dim(games)[1] # 74% of games discarded -> maybe too much 
+hist(games$average)
+hist(games$average[-ind])
+hist(games$average[ind] )
+length(ind) # quite a lot 
 
 
 
