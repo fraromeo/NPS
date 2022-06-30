@@ -233,5 +233,7 @@ model_gam = gam(average ~ averageweight + s(minage, bs = 'cr') + s(playingtime, 
 summary(model_gam)
 
 model_gam2 = gam(average ~  s(wanting, bs = 'cr') + averageweight + s(minage, bs = 'cr'), data=df) # put wanting does not really make sense 
-summary(model_lm)
+summary(model_gam2)
+
+
 
