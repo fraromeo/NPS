@@ -172,6 +172,7 @@ clusters <- rect.hclust(dendo, k=25) # reduce categories from 70 to 25
 ### ideas for cleaning the dataset: 
 
 # games with not available minage (also suggested_player_age seems to have only 0 votes)
+# also minplayers and playingtime are not available when se to zero
 ind <- which(games$minage == 0) 
 hist(games$average)
 hist(games$average[-ind]) # very similar to the one of full dataset
