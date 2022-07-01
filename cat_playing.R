@@ -34,6 +34,6 @@ dim(games)
 dim(games[games$year > 1990, ]) 
 
 category.indices <- 31:100
-compute.cooccurrence(games[,category.indices])
+mat_cooccur <- compute.cooccurrence(games[,category.indices])
 
 write.csv(games, 'games_da_ripulire.csv')

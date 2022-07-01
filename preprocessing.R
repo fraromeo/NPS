@@ -141,31 +141,32 @@ games <- games[!games[,'numweights'] == 0,] # zero averageweight
 saveRDS(games, file='data.RDS')
 
 
-### create table with commong categories 
+### create table with common categories 
 which(colnames(games) == 'Childrens.Game' | colnames(games) == 'Zombies')
 first_cat <- 31
 last_cat <- 100
-two_way_table <- matrix(nrow = last_cat - first_cat, ncol =last_cat - first_cat )
-dist_mat <- matrix(nrow = last_cat - first_cat, ncol = last_cat - first_cat)
+two_way_table <- matrix(nrow = last_cat - first_cat + 1, ncol =last_cat - first_cat +1 )
+dist_mat <- matrix(nrow = last_cat - first_cat + 1, ncol = last_cat - first_cat + 1)
 for (i in first_cat:last_cat){
   for(j in first_cat:last_cat){
     cat_rows <- which(games[,i] == 1)
     
     common <- length(which(games[cat_rows,j] == 1))
-    two_way_table[i-first_cat,j-first_cat] <- common
+    two_way_table[i - first_cat + 1 ,j - first_cat + 1 ]  <- common
     if (common == 0){
-      dist_mat[i-first_cat,j-first_cat] <- 2
+      dist_mat[i-first_cat + 1,j-first_cat + 1] <- 2
     }else{
-      dist_mat[i-first_cat,j-first_cat] <- 1/common
+      dist_mat[i-first_cat+ 1,j-first_cat+ 1] <- 1/common
     }
   }
 }
 
 dist_mat <- as.dist(dist_mat)
-rownames(dist_mat) <- colnames(games[first_cat, last_cat])
+# rownames(dist_mat) <- colnames(games[,first_cat : last_cat])
+colnames(two_way_table) <- rownames(two_way_table) <- colnames(games[, first_cat: last_cat])
 dendo <- hclust(dist_mat, method='complete')
 plot(dendo, main='complete', hang=-0.1, xlab='', labels=F, cex=0.6, sub='')
-rect.hclust(dendo, k=25) # reduce categories from 59 to 25 
+clusters <- rect.hclust(dendo, k=25) # reduce categories from 70 to 25 
 
 
 ### ideas for cleaning the dataset: 
