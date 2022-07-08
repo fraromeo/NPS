@@ -26,7 +26,7 @@ names(games)
 library("corrplot")
 cat.indices <- 23:61#92:136
 cor.mat <- round(cor(games[,cat.indices]),2)
-x11()
+#x11()
 corrplot(cor.mat, type="upper", order="hclust", 
          tl.col="black", tl.srt=45)
 
@@ -74,9 +74,9 @@ summary(games$cluster)
 summary(games$numratings)
 
 
-####### some analysis
+####### some analysis #####
 games <- games[games$numratings > 100,]
-fit <- lm(games$wanting ~ games$average * games$averageweight * games$cluster)
+fit <- lm(games$average ~ games$numratings * games$averageweight * games$cluster)
 summary(fit)
 
 plot(fit)
@@ -99,7 +99,7 @@ matlines(x.grid$x, se.bands, lwd =1, col="blue", lty =3)
 
 
 library(mgcv)
-model_gam=gam(wanting ~ s(average,bs='cr') + s(averageweight,bs='cr') + cluster + s(suggested_num_players,bs='cr') + s(playingtime, bs='cr'), data = games)
+model_gam=gam(average ~ s(numratings,bs='cr') + s(averageweight,bs='cr') + cluster + s(suggested_num_players,bs='cr') + s(playingtime, bs='cr'), data = games)
 summary(model_gam)
 
 hist(model_gam$residuals)
