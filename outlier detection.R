@@ -216,7 +216,7 @@ clusterization.df <- function(df, reference.cluster, cat.ind) {
     
   }
   
-  games$cluster <- apply(games[,23:61], 1, clusterization.row, reference.cluster=categories.clusters)
+  games$cluster <- apply(games[,category.indices], 1, clusterization.row, reference.cluster=reference.cluster)
   games$cluster <- as.factor(games$cluster)
   
   return (games)
