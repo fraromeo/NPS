@@ -12,14 +12,27 @@ library(splines)
 library(mgcv)
 library(kernlab)
 
-games <- readRDS("data.RDS")
 
-glimpse(games[1:30])
-summary(games[1:30])
+### dataset 
+games <- read.csv('games_cleaned.csv')
+cols.dont.want <- c("X", "Unnamed..0", 
+                    "description", "suggested_playerage", 
+                    "suggested_language_dependence", "category",
+                    "family", "designer", "artist", "publisher") # if you want to remove multiple columns
+
+games <- games[, ! names(games) %in% cols.dont.want, drop = F]
+names(games)
+tab = colSums(games[,c(23:92)])
+summary(tab)
+few_sample = names(tab)[tab < 300]
+games[,few_sample] <- NULL
+names(games)
+
+glimpse(games[1:22])
+summary(games[1:22])
 
 dim(games)
 dim(games[games$year > 1990, ]) 
-
 
 
 #### General stuff ####
@@ -114,17 +127,18 @@ with(games, plot( minplaytime, averageweight))
 with(games, plot( year, averageweight)) # considering a company that wants to create a succesful game, this is not a covariate 
 with(games, plot( minplayers, averageweight))
 with(games, plot( maxplayers, averageweight)) # minplayers seems to be more informative 
+with(games, plot(suggested_num_players, averageweight))
 # I can take out the ones with not available minage or minplayers or playingtime
 # i.e. when these covariates are equal to zero 
 # (I checked on boardgamegeek, they don't have a value provided for that category) 
 par(mfrow= c(1,1))
-ind <- which(games$minage == 0 | games$playingtime == 0 | games$minplayers == 0) # 1753 games 
+ind <- which(games$minage == 0 | games$suggested_num_players == -1 | games$playingtime == 0 ) # 1753 games 
 y <- games$averageweight[-ind]
-x1 <- games$minage[-ind]
-x2 <- games$minplayers[-ind]
+x1 <- games$suggested_num_players[-ind]
 x3 <- games$playingtime[-ind]
+x2 <- games$minage[-ind]
 gam_ssplines = gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr'))  
-summary(gam_ssplines) # 60% R^2 adjusted with these three covariates (with minage = 0 is 58%)
+summary(gam_ssplines) # 62% R^2 adjusted with these three covariates
 
 
 hist(gam_ssplines$residuals)
@@ -226,11 +240,11 @@ points(x1, y, col = 'green')
 model2 <- gam(x1 ~ s(x2, bs = 'cr') + s(x3, bs = 'cr') + s(x4, bs = 'cr') + s(x5, bs = 'cr'))
 summary(model2)
 
-#### Working on categories (WIP) ####
+#### Anova on categories after clustering ####
 
 which(colnames(games) == 'Childrens.Game' | colnames(games) == 'Zombies')
-first_cat <- 31
-last_cat <- 100
+first_cat <- 23
+last_cat <- 61
 two_way_table <- matrix(nrow = last_cat - first_cat + 1, ncol =last_cat - first_cat +1 )
 dist_mat <- matrix(nrow = last_cat - first_cat + 1, ncol = last_cat - first_cat + 1)
 for (i in first_cat:last_cat){
@@ -239,25 +253,97 @@ for (i in first_cat:last_cat){
     
     common <- length(which(games[cat_rows,j] == 1))
     two_way_table[i - first_cat + 1 ,j - first_cat + 1 ]  <- common
-    if (common == 0){
-      dist_mat[i-first_cat + 1,j-first_cat + 1] <- 2
-    }else{
-      dist_mat[i-first_cat+ 1,j-first_cat+ 1] <- 1/common
-    }
+    dist_mat[i-first_cat+ 1,j-first_cat+ 1] <- 1/(common+1)
   }
 }
 
-dist_mat <- as.dist(dist_mat)
+
 # rownames(dist_mat) <- colnames(games[,first_cat : last_cat])
 colnames(two_way_table) <- rownames(two_way_table) <- colnames(games[, first_cat: last_cat])
-dendo <- hclust(dist_mat, method='complete')
+colnames(dist_mat) <- rownames(dist_mat) <- colnames(games[, first_cat: last_cat])
+dendo <- hclust(as.dist(dist_mat), method='complete')
 plot(dendo, main='complete', hang=-0.1, xlab='', labels=F, cex=0.6, sub='')
-clusters <- rect.hclust(dendo, k=20) # reduce categories from 70 to 25 
+clusters <- rect.hclust(dendo, k=9) # reduce categories from 70 to 25 
+cluster <- cutree(dendo, k=9)
+
+cat_aov <- NULL
+for(i in 1:8){
+  
+  cat <- names(cluster[which(cluster == i)])
+  occurs <- diag(two_way_table[cat,cat])
+  cat_aov <- c(cat_aov,names(occurs[which(occurs == max(occurs))]))
+} 
+two_way_table[cat_aov,cat_aov]
 
 
+perm_anova_twoway_interaction = function(outcome, short_formula, long_formula, to_test, iter=1e3){
+  T0 <- summary.aov(aov(long_formula))[[1]][to_test,4]
+  T_stat <- numeric(iter)
+  n <- length(outcome)
+  aov.H0 <- aov(short_formula)
+  residuals.H0 <- aov.H0$residuals
+  pb = progress::progress_bar$new(total = iter,
+                                  format = " Processing [:bar] :percent eta: :eta")
+  set.seed(2022)
+  for(perm in 1:iter){
+    permutation <- sample(1:n)
+    residuals.H0 <- residuals.H0[permutation]
+    y.perm.H0 <- aov.H0$fitted + residuals.H0
+    newfm <- reformulate(deparse(long_formula[[3]]),response = "y.perm.H0")
+    T_stat[perm] <- summary.aov(aov(newfm))[[1]][to_test,4]
+    pb$tick()
+  }
+  hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30) 
+  abline(v=T0,col=3,lwd=2)
+  
+  plot(ecdf(T_stat), xlim = range(c(T_stat,T0)))
+  abline(v=T0,col=3,lwd=2)
+  p_val <- sum(T_stat>=T0)/iter
+  print(p_val)
+  return(p_val) 
+}
+
+short_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + games$Economic + games$Party.Game + games$Print...Play
+long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + games$Economic + games$Party.Game + games$Print...Play + games$Puzzle
+pval <- perm_anova_twoway_interaction(games$wanting, short_formula, long_formula, 8) # pval 0.075 games$Puzzle not significant 
+
+short_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + games$Economic + games$Party.Game
+long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + games$Economic + games$Party.Game + games$Print...Play
+pval <- perm_anova_twoway_interaction(games$wanting, short_formula, long_formula, 7) #  games$Print...Play significant 
+
+short_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + games$Economic + games$Print...Play
+long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + games$Economic + games$Party.Game + games$Print...Play
+pval <- perm_anova_twoway_interaction(games$wanting, short_formula, long_formula, 6) #  games$Party.Game  significant 
+
+short_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + + games$Party.Game + games$Print...Play
+long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + games$Economic + games$Party.Game + games$Print...Play
+pval <- perm_anova_twoway_interaction(games$wanting, short_formula, long_formula, 5) #  games$Economic  significant 
+
+short_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice +  games$Economic + games$Party.Game + games$Print...Play
+long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + games$Economic + games$Party.Game + games$Print...Play
+pval <- perm_anova_twoway_interaction(games$wanting, short_formula, long_formula, 4) #  games$Medieval  significant 
+
+short_formula <- games$wanting ~ games$Card.Game + games$Wargame  + games$Medieval +  games$Economic + games$Party.Game + games$Print...Play
+long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Dice + games$Medieval + games$Economic + games$Party.Game + games$Print...Play
+pval <- perm_anova_twoway_interaction(games$wanting, short_formula, long_formula, 3) #  pval 0.021 games$Dice  not significant 
+
+short_formula <- games$wanting ~ games$Card.Game + games$Medieval +  games$Economic + games$Party.Game + games$Print...Play
+long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Medieval + games$Economic + games$Party.Game + games$Print...Play
+pval <- perm_anova_twoway_interaction(games$wanting, short_formula, long_formula, 2) # games$Wargame significant 
 
 
-### let's consider the three most common categories 
+short_formula <- games$wanting ~  games$Wargame + games$Medieval +  games$Economic + games$Party.Game + games$Print...Play
+long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Medieval + games$Economic + games$Party.Game + games$Print...Play
+pval <- perm_anova_twoway_interaction(games$wanting, short_formula, long_formula, 1) # games$Card.Game significant 
+
+final_model <- aov(long_formula)
+final_model$coefficient
+
+## economic is the type that increases the wanting the most. It has a pos coeff, together with medieval 
+## the others have negative coefficients 
+
+#### anova for wanting/average/averageweight for three most popular categories ####
+
 most_popular_categories <- names(sort(diag(two_way_table), decreasing = T)[1:3])
 two_way_table[most_popular_categories, most_popular_categories]
 # half of the games belongs to these three categories 
@@ -277,14 +363,10 @@ hist(games$averageweight[ind3])
 
 ## anova three way of most popular categories on wanting 
 
-model_aov3 <- aov(games$wanting ~ games$Card.Game + games$Wargame + games$Fantasy + games$Card.Game:games$Wargame + games$Card.Game:games$Fantasy + games$Fantasy:games$Wargame)
-
 
 boxplot(scale(games$wanting) ~ games$Card.Game)
 boxplot(games$wanting ~ games$Wargame)
 boxplot(games$wanting ~ games$Fantasy)
-short_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Fantasy + games$Card.Game:games$Wargame + games$Card.Game:games$Fantasy
-long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Fantasy + games$Card.Game:games$Wargame + games$Card.Game:games$Fantasy + games$Fantasy:games$Wargame
 
 perm_anova_twoway_interaction = function(outcome, short_formula, long_formula, to_test, iter=1e3){
   T0 <- summary.aov(aov(long_formula))[[1]][to_test,4]
@@ -299,7 +381,8 @@ perm_anova_twoway_interaction = function(outcome, short_formula, long_formula, t
     permutation <- sample(1:n)
     residuals.H0 <- residuals.H0[permutation]
     y.perm.H0 <- aov.H0$fitted + residuals.H0
-    T_stat[perm] <- summary.aov(aov(y.perm.H0 ~ games$Card.Game + games$Wargame + games$Fantasy + games$Card.Game:games$Fantasy))[[1]][to_test,4]
+    newfm <- reformulate(deparse(long_formula[[3]]),response = "y.perm.H0")
+    T_stat[perm] <- summary.aov(aov(newfm))[[1]][to_test,4]
     pb$tick()
   }
   hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30) 
@@ -315,7 +398,6 @@ perm_anova_twoway_interaction = function(outcome, short_formula, long_formula, t
 short_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Fantasy + games$Card.Game:games$Wargame + games$Card.Game:games$Fantasy
 long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Fantasy + games$Card.Game:games$Wargame + games$Card.Game:games$Fantasy + games$Fantasy:games$Wargame
 pval <- perm_anova_twoway_interaction(games$wanting, short_formula, long_formula, 6) # games$Fantasy:games$Wargame not significant 
-
 
 short_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Fantasy + games$Card.Game:games$Wargame 
 long_formula <- games$wanting ~ games$Card.Game + games$Wargame + games$Fantasy + games$Card.Game:games$Wargame + games$Card.Game:games$Fantasy 
