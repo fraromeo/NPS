@@ -70,3 +70,62 @@ clusterization.df <- function(df, reference.cluster, cat.ind) {
 
 games <- clusterization.df(df=games, reference.cluster = categories.clusters, cat.ind = cat.indices)
 summary(games$cluster)
+
+summary(games$numratings)
+
+
+####### some analysis
+games <- games[games$numratings > 100,]
+fit <- lm(games$wanting ~ games$average * games$averageweight * games$cluster)
+summary(fit)
+
+plot(fit)
+
+
+y <- games$average
+x <- games$averageweight
+local_model = npreg(y ~ x,
+                    ckertype = 'epanechnikov',
+                    bws = 0.5) # set the bandwidth
+
+
+
+x.grid=data.frame(x=seq(range(x)[1],range(x)[2],by=0.1))
+preds=predict(local_model, newdata=x.grid, se=T)
+se.bands=cbind(preds$fit+2*preds$se.fit, preds$fit-2*preds$se.fit)
+plot(x, y, xlim = range(x.grid$x), cex=.5, col="darkgrey")
+lines(x.grid$x, preds$fit, lwd =2, col="blue")
+matlines(x.grid$x, se.bands, lwd =1, col="blue", lty =3)
+
+
+library(mgcv)
+model_gam=gam(wanting ~ s(average,bs='cr') + s(averageweight,bs='cr') + cluster + s(suggested_num_players,bs='cr') + s(playingtime, bs='cr'), data = games)
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals[sample(1:3000)])
+
+plot(model_gam)
+
+model_gam_reduced=gam(average ~ s(averageweight,bs='cr') + cluster, data = games)
+summary(model_gam_reduced)
+
+anova(model_gam_reduced,model_gam, test = "F")
+
+
+fit_MCD <- covMcd(x = games[,c('playingtime', 'suggested_num_players')], alpha = .99, nsamp = "best")
+fit_MCD
+colMeans(games[,c('playingtime', 'suggested_num_players')])
+
+ind_best_subset <- fit_MCD$best
+N <- nrow(games[,c('playingtime', 'suggested_num_players')])
+p <- ncol(games[,c('playingtime', 'suggested_num_players')])
+plot(games[,c('playingtime', 'suggested_num_players')], col=ifelse(1:N%in%ind_best_subset,"black","red"),pch=19)
+
+#plot(fit_MCD,classic=TRUE)
+
+games_best <- games[ind_best_subset,]
+model_gam_best=gam(average ~ s(averageweight,bs='cr') + cluster + s(suggested_num_players,bs='cr') + s(playingtime, bs='cr'), data = games_best)
+summary(model_gam_best)
+plot(games_best[,c('playingtime', 'averageweight')],pch=19)
