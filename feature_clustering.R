@@ -38,8 +38,8 @@ dist_mat <- as.dist(dist_mat)
 # rownames(dist_mat) <- colnames(games[,first_cat : last_cat])
 dendo <- hclust(dist_mat, method='complete')
 plot(dendo, main='complete', hang=-0.1, xlab='', labels=F, cex=0.6, sub='')
-rect.clusters <- rect.hclust(dendo, k=9)
-categories.clusters <- cutree(dendo, k=9)
+rect.clusters <- rect.hclust(dendo, k=7)
+categories.clusters <- cutree(dendo, k=7)
 
 # try to merge features
 
