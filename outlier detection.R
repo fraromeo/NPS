@@ -135,7 +135,7 @@ few_sample.category = names(tab.category)[tab.category < 300]
 
 tab.mechanic = colSums(games[,mechanic.indices])
 summary(tab.mechanic)
-few_sample.mechanic = names(tab.mechanic)[tab.mechanic < 600]
+few_sample.mechanic = names(tab.mechanic)[tab.mechanic < 300]
 
 games[,c(few_sample.category, few_sample.mechanic)] <- NULL
 
@@ -198,7 +198,7 @@ rect.clusters <- rect.hclust(dendo, k=7)
 category.clusters <- cutree(dendo, k=7)
 
 # clusterize instances
-clusterization.df <- function(df, reference.cluster, cat.ind) {
+clusterization.df <- function(df, reference.cluster, reference.indices, column.name) {
   clusterization.row <- function(df.row, reference.cluster){
     
     len = length(unique(reference.cluster))
@@ -216,13 +216,120 @@ clusterization.df <- function(df, reference.cluster, cat.ind) {
     
   }
   
-  games$cluster <- apply(games[,category.indices], 1, clusterization.row, reference.cluster=reference.cluster)
-  games$cluster <- as.factor(games$cluster)
+  games[,column.name] <- apply(games[,reference.indices], 1, clusterization.row, reference.cluster=reference.cluster)
+  games[,column.name] <- as.factor(games[,column.name])
   
   return (games)
 }
 
-games <- clusterization.df(df=games, reference.cluster = category.clusters, cat.ind = category.indices)
-summary(games$cluster)
+games <- clusterization.df(df=games, reference.cluster = category.clusters, 
+                           reference.indices = category.indices, column.name='category.cluster')
+summary(games$category.cluster)
 
-write.csv(games, 'clusterized_games1.csv')
+#write.csv(games, 'clusterized_games1.csv')
+
+##### Mechanic Clustering ####
+
+for (ind in mechanic.indices){
+  games[,ind] <- as.numeric(games[,ind])-1
+}
+cor.mat <- round(cor(games[,mechanic.indices]),2)
+
+#observe correlation matrix
+#x11()
+corrplot(cor.mat, type="upper", order="hclust", 
+         tl.col="black", tl.srt=45)
+
+# compute distance matrix
+mechanic.co.oc <- compute.cooccurrence(games[,mechanic.indices])
+mechanic.dist_mat <- 1/(mechanic.co.oc+1)
+mechanic.dist_mat <- as.dist(mechanic.dist_mat)
+
+# observe dendrogram - 4 looks best
+mechanic.dendo <- hclust(mechanic.dist_mat, method='complete')
+plot(mechanic.dendo, main='complete', hang=-0.1, xlab='', labels=F, cex=0.6, sub='')
+mechanic.rect.clusters <- rect.hclust(mechanic.dendo, k=4)
+mechanic.clusters <- cutree(mechanic.dendo, k=4)
+
+games <- clusterization.df(df=games, reference.cluster=mechanic.clusters, 
+                           reference.indices=mechanic.indices, column.name='mechanic.cluster')
+summary(games$mechanic.cluster)
+
+write.csv(games, 'clusterized_games2.csv')
+
+##### Keeping only recent years and good numratings/numcomments #####
+games <- games[games$year > 2000,]
+games <- games[games$numratings > 150,]
+games <- games[games$numcomments > 100,]
+
+##### Robust statistics on wanting/owning ####
+library(robustbase)
+fit_MCD <- covMcd(x = games[, c('wanting', 'owned', 'average', 'averageweight')], alpha = .99, nsamp = "best")
+fit_MCD
+#plot(fit_MCD,classic=TRUE)
+
+
+ind_best_subset <- fit_MCD$best
+N <- nrow(games[, c('wanting', 'owned')])
+p <- ncol(games[, c('wanting', 'owned')])
+
+
+library(ggpubr)
+games.plot <- cbind(games, status=ifelse(1:N%in%ind_best_subset,"inlier","outlier"))
+
+owned.dplot <- ggdensity(games.plot, "owned", fill = "status",
+                         palette = "jco") + rotate() + clean_theme()
+
+wanting.dplot <- ggdensity(games.plot, "wanting", fill = "status",
+                         palette = "jco") + clean_theme()
+
+average.dplot <- ggdensity(games.plot, "average", fill = "status",
+                           palette = "jco") + rotate() + clean_theme()
+
+complexity.dplot <- ggdensity(games.plot, "averageweight", fill = "status",
+                           palette = "jco") + clean_theme()
+
+sp.wo <- ggscatter(games.plot, x = "wanting", y = "owned",
+                #add = "reg.line",               # Add regression line
+                #conf.int = TRUE,                # Add confidence interval
+                color = 'status', 
+                palette = "jco", # Color by groups "cyl"
+                shape = "status"                   # Change point shape by groups "cyl"
+)
+
+sp.wa <- ggscatter(games.plot, x = "wanting", y = "average",
+                   #add = "reg.line",               # Add regression line
+                   #conf.int = TRUE,                # Add confidence interval
+                   color = 'status', 
+                   palette = "jco", # Color by groups "cyl"
+                   shape = "status"                   # Change point shape by groups "cyl"
+)
+
+sp.ac <- ggscatter(games.plot, x = "averageweight", y = "average",
+                   #add = "reg.line",               # Add regression line
+                   #conf.int = TRUE,                # Add confidence interval
+                   color = 'status', 
+                   palette = "jco", # Color by groups "cyl"
+                   shape = "status"                   # Change point shape by groups "cyl"
+)
+
+sp.oc <- ggscatter(games.plot, x = "averageweight", y = "owned",
+                   #add = "reg.line",               # Add regression line
+                   #conf.int = TRUE,                # Add confidence interval
+                   color = 'status', 
+                   palette = "jco", # Color by groups "cyl"
+                   shape = "status"                   # Change point shape by groups "cyl"
+)
+x11()
+ggarrange(NULL, complexity.dplot, wanting.dplot,
+          owned.dplot, sp.oc, sp.wo, 
+          average.dplot, sp.ac, sp.wa, 
+          labels = c("A", "B", "C", 
+                     'D', 'E', 'F', 
+                     'G', 'H', 'I'),
+          ncol = 3, nrow = 3, align='hv', common.legend = TRUE, legend = "top")
+
+games <- games[games.plot$status == 'inlier',]
+
+write.csv(games, 'clusterized_games2.csv')
+###### K-medoids #####
