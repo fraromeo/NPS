@@ -93,7 +93,7 @@ var_importance <- function(shap_result, top_n=10)
   var_importance=var_importance[1:top_n,]
   
   ggplot(var_importance, aes(x=reorder(var,importance), y=importance)) + 
-    geom_bar(stat = "identity") + 
+    geom_bar(stat = "identity", fill = 'red', col = 'red') + 
     coord_flip() + 
     theme_light() + 
     theme(axis.title.y=element_blank()) 
