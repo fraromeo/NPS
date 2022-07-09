@@ -255,7 +255,7 @@ games <- clusterization.df(df=games, reference.cluster=mechanic.clusters,
                            reference.indices=mechanic.indices, column.name='mechanic.cluster')
 summary(games$mechanic.cluster)
 
-write.csv(games, 'clusterized_games2.csv')
+#write.csv(games, 'clusterized_games2.csv')
 
 ##### Keeping only recent years and good numratings/numcomments #####
 games <- games[games$year > 2000,]
@@ -331,5 +331,152 @@ ggarrange(NULL, complexity.dplot, wanting.dplot,
 
 games <- games[games.plot$status == 'inlier',]
 
-write.csv(games, 'clusterized_games2.csv')
-###### K-medoids #####
+#write.csv(games, 'clusterized_games2.csv')
+###### K-medoids Categories #####
+library(cluster)
+
+for (ind in c(category.indices, mechanic.indices)){
+  games[,ind] <- factor(games[, ind], levels = c('0', '1'))
+}
+
+category.gower_dist <- 
+  games %>% 
+  # de-select account_id
+  select(c(category.indices, 
+           #mechanic.indices
+           )) %>%   
+  daisy(metric = "gower")
+
+category.sil_width <- c(NA)
+
+for (i in 2:8) {  
+  category.pam_fit <- pam(category.gower_dist, diss = TRUE, k = i)  
+  category.sil_width[i] <- category.pam_fit$silinfo$avg.width 
+  cat("Done: ", i, 'Clusters\n')
+}
+
+category.sil_width %>% 
+  as_tibble() %>% 
+  rowid_to_column() %>% 
+  filter(rowid %in% c(2:8)) %>% 
+  ggplot(aes(rowid, value)) +
+  geom_line(colour  = 'black', size = 0.7) +
+  geom_point(colour = 'black', size = 1.3) +
+  theme_minimal() +
+  labs(title = 'Silhouette Widths of k-medoid Clusters',
+       x     = "Number of clusters",
+       y     = 'Silhouette Width') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# visualization
+category.pam_fit <- 
+  category.gower_dist %>% 
+  # diss = TRUE to treat argument as dissimilarity matrix
+  pam(k = 6, diss = TRUE)
+
+library(Rtsne)
+category.tsne_obj <- Rtsne(category.gower_dist, is_distance = TRUE)
+category.tsne_obj$Y %>%
+  data.frame() %>%
+  setNames(c("X", "Y")) %>%
+  mutate(cluster = factor(category.pam_fit$clustering)) %>% 
+  
+  # plot
+  ggplot(aes(x = X, y = Y, colour = cluster)) +
+  geom_point() +
+  theme_light() +
+  labs(title       = 't-SNE 2D Projections of k-medoid Clusters')  +
+  theme(plot.title = element_text(hjust = 0.5))
+
+category.clust_data <- games
+category.pam_results <- category.clust_data %>%
+  # append the cluster information onto clust_data
+  mutate(cluster = category.pam_fit$clustering) %>% 
+  # sort out variable order
+  select(id, cluster, everything()) %>% 
+  # attach some extra data features from the data_clean file
+  left_join(select(games, 
+                   c(id, average, averageweight)), by = 'id') %>%
+  mutate_if(is.character, funs(factor(.)))
+
+category.pam_results %>% 
+  filter(cluster == 5) %>%
+  select(c(average.x, averageweight.x, averageweight.y, wanting, owned)) %>% 
+  summary()
+
+
+###### K-medoids Mechanics #####
+
+for (ind in c(category.indices, mechanic.indices)){
+  games[,ind] <- factor(games[, ind], levels = c('0', '1'))
+}
+
+mechanic.gower_dist <- 
+  games %>% 
+  # de-select account_id
+  select(c(#category.indices, 
+           mechanic.indices
+  )) %>%   
+  daisy(metric = "gower")
+
+mechanic.sil_width <- c(NA)
+
+for (i in 2:8) {  
+  mechanic.pam_fit <- pam(mechanic.gower_dist, diss = TRUE, k = i)  
+  mechanic.sil_width[i] <- mechanic.pam_fit$silinfo$avg.width 
+  cat("Done: ", i, 'Clusters\n')
+}
+
+mechanic.sil_width %>% 
+  as_tibble() %>% 
+  rowid_to_column() %>% 
+  filter(rowid %in% c(2:8)) %>% 
+  ggplot(aes(rowid, value)) +
+  geom_line(colour  = 'black', size = 0.7) +
+  geom_point(colour = 'black', size = 1.3) +
+  theme_minimal() +
+  labs(title = 'Silhouette Widths of k-medoid Clusters',
+       x     = "Number of clusters",
+       y     = 'Silhouette Width') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# visualization
+mechanic.pam_fit <- 
+  mechanic.gower_dist %>% 
+  # diss = TRUE to treat argument as dissimilarity matrix
+  pam(k = 6, diss = TRUE)
+
+mechanic.tsne_obj <- Rtsne(mechanic.gower_dist, is_distance = TRUE)
+mechanic.tsne_obj$Y %>%
+  data.frame() %>%
+  setNames(c("X", "Y")) %>%
+  mutate(cluster = factor(mechanic.pam_fit$clustering)) %>% 
+  
+  # plot
+  ggplot(aes(x = X, y = Y, colour = cluster)) +
+  geom_point() +
+  theme_light() +
+  labs(title       = 't-SNE 2D Projections of k-medoid Clusters')  +
+  theme(plot.title = element_text(hjust = 0.5))
+
+mechanic.clust_data <- games
+mechanic.pam_results <- mechanic.clust_data %>%
+  # append the cluster information onto clust_data
+  mutate(cluster = mechanic.pam_fit$clustering) %>% 
+  # sort out variable order
+  select(id, cluster, everything()) %>% 
+  # attach some extra data features from the data_clean file
+  left_join(select(games, 
+                   c(id, average, averageweight)), by = 'id') %>%
+  mutate_if(is.character, funs(factor(.)))
+
+mechanic.pam_results %>% 
+  filter(cluster == 1) %>%
+  select(c(average.x, averageweight.x, averageweight.y, wanting, owned)) %>% 
+  summary()
+
+
+##### Add column
+games[,'category.cluster.kmed'] <- as.factor(category.pam_fit$clustering)
+games[,'mechanic.cluster.kmed'] <- as.factor(mechanic.pam_fit$clustering)
+write.csv(games, 'clusterized_games3.csv')
