@@ -263,46 +263,43 @@ aggregate(outcome, list(I(games$averageweight < high_avgw & games$averageweight 
 
 
 
-
-#### linear model for average weight  ####
-
-plot(games[,c('averageweight','minage','playingtime','suggested_num_players')])
-ggpairs(games[,c('averageweight','minage','playingtime','suggested_num_players')])
-
-y <- games$averageweight
-x1 <- games$suggested_num_players
-x3 <- games$playingtime
-x2 <- games$minage
-gam_ssplines = gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr'))  
-summary(gam_ssplines) # 62% R^2 adjusted with these three covariates
-
-## let's try also with cluster 
-boxplot(games$averageweight ~ games$cluster)
-
-x4 <- games$cluster
-gam_ssplines_cl <- gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + x4)
-summary(gam_ssplines_cl)
-
-x4 <- ifelse( games$cluster == 1,1, 0)
-x5 <- ifelse( games$cluster == 2,1, 0)
-gam_ssplines_cl <- gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + x4 + x5)
-summary(gam_ssplines_cl)
-## not so great 
-
-## let's try with year 
-
-x4 <- games$year
-gam_ssplines_yr<- gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + s(x4,bs = 'cr'))
-summary(gam_ssplines_yr) ## R^2 adj is just 62.5% 
-hist(gam_ssplines_yr$residuals)
-qqnorm(gam_ssplines_yr$residuals)
-
-anova(gam_ssplines_yr,gam_ssplines, test = "F") # the models are different
-# but the R2 adj doesn't increase 
-
 #### permutational anova  averageweight ~   cluster ####
 outcome <- games$averageweight
-boxplot(outcome~  games$cluster) 
+boxplot(outcome ~  games$cluster) 
+
+
+B = 1000
+seed = 2022
+
+fit <- aov( outcome ~  games$cluster)
+T0 <- summary(fit)[[1]][1,4]
+
+T_stat <- numeric(B)
+n <- length(outcome)
+for(i in 1:B){
+  perm <- sample(1:n)
+  outcome_perm <- outcome[perm]
+  fit_p <- aov( outcome_perm ~ games$cluster )
+  T_stat[i] <- summary(fit_p)[[1]][1,4]
+  
+}
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30)
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=range(c(T_stat,T0)))
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val # difference between groups 
+
+
+
+
+
+#### permutational anova  average ~   cluster ####
+outcome <- games$average
+boxplot(outcome ~  games$cluster) 
 
 
 B = 1000
@@ -336,6 +333,36 @@ p_val # difference between groups
 
 
 
+#### permutational anova multiple ways  average ~   cluster ####
+outcome <- games$average
+dummy_vars <- fastDummies::dummy_cols(games$cluster)
+boxplot(outcome ~  games$cluster) 
+
+
+B = 1000
+seed = 2022
+
+fit <- aov( outcome ~  )
+T0 <- summary(fit)[[1]][1,4]
+
+T_stat <- numeric(B)
+n <- length(outcome)
+for(i in 1:B){
+  perm <- sample(1:n)
+  outcome_perm <- outcome[perm]
+  fit_p <- aov( outcome_perm ~ games$cluster )
+  T_stat[i] <- summary(fit_p)[[1]][1,4]
+  
+}
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30)
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=range(c(T_stat,T0)))
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val # difference between groups 
 
 
 
@@ -344,7 +371,85 @@ p_val # difference between groups
 
 
 
+#### linear model for average weight  ####
 
+plot(games[,c('averageweight','minage','playingtime','suggested_num_players')])
+ggpairs(games[,c('averageweight','minage','playingtime','suggested_num_players')])
+n <- 10000
+set.seed(2022)
+ind <- sample(1:dim(games)[1], size = n, replace = F)
+y <- games$averageweight[ind]
+x1 <- games$suggested_num_players[ind]
+x3 <- games$playingtime[ind]
+x2 <- games$minage[ind]
+gam_ssplines = gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr'))  
+summary(gam_ssplines) # 62% R^2 adjusted with these three covariates
+
+## shapley value 
+df_train <- data.frame(x1 = x1, x2 = x2, x3 = x3)
+explainer <- shapr(df_train,  gam_ssplines)
+p <- mean(y)
+df_test <- data.frame( x1 = games$suggested_num_players[-ind], x2 = games$minage[-ind], x3 = games$playingtime[-ind])
+explanation <- explain(df_test,approach = "empirical",explainer = explainer, prediction_zero = p )
+plot(explanation, plot_phi0 = FALSE, index_x_test = c(1, 6))
+
+
+## let's try also with cluster 
+boxplot(games$averageweight ~ games$cluster)
+
+x4 <- games$cluster
+gam_ssplines_cl <- gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + x4)
+summary(gam_ssplines_cl)
+
+x4 <- ifelse( games$cluster == 1,1, 0)
+x5 <- ifelse( games$cluster == 2,1, 0)
+gam_ssplines_cl <- gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + x4 + x5)
+summary(gam_ssplines_cl)
+## not so great 
+
+## let's try with year 
+
+x4 <- games$year
+gam_ssplines_yr<- gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + s(x4,bs = 'cr'))
+summary(gam_ssplines_yr) ## R^2 adj is just 62.5% 
+hist(gam_ssplines_yr$residuals)
+qqnorm(gam_ssplines_yr$residuals)
+
+anova(gam_ssplines_yr,gam_ssplines, test = "F") # the models are different
+# but the R2 adj doesn't increase 
+
+
+#### XGboost for average weight
+source("shap.R")
+n <- 10000
+set.seed(2022)
+ind <- sample(1:dim(games)[1], size = n, replace = F)
+y <- games$averageweight[ind]
+x1 <- games$suggested_num_players[ind]
+x3 <- games$playingtime[ind]
+x2 <- games$minage[ind]
+df_train <- as.matrix(data.frame(x1 = x1, x2 = x2, x3 = x3))
+df_test <- as.matrix(data.frame( x1 = games$suggested_num_players[-ind], x2 = games$minage[-ind], x3 = games$playingtime[-ind]))
+xgb_train = xgb.DMatrix(data = df_train, label = y)
+xgb_test = xgb.DMatrix(data = df_test, label = games$averageweight[-ind])
+
+watchlist_xgb = list(train=xgb_train, test = xgb_test )
+model = xgb.train(data = xgb_train, max.depth = 6, watchlist = watchlist_xgb, nrounds = 70)
+# let's stay with 10 rounds 
+xgb_avgw <- xgboost(data = xgb_train, 
+                    nround = 10, 
+                    objective="reg:linear",
+                    label = y)
+shap_result_avgw = shap.score.rank(xgb_model = xgb_avgw, 
+                                   X_train = df_train,
+                                   shap_approx = F
+)
+var_importance(shap_result_avgw, top_n=3)
+shap_long_avgw = shap.prep(shap = shap_result_avgw,
+                           X_train = df_train, 
+                           top_n = 3
+)
+plot.shap.summary(data_long = shap_long_avgw)
 
 
 
@@ -379,6 +484,16 @@ gam_ssplines_avg = gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + s(
 summary(gam_ssplines_avg) # 46% 
 
 dummy_vars <- fastDummies::dummy_cols(games$cluster)
+gam_ssplines_avg_clust = gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + s(x4, bs='cr') + s(x5, bs='cr') + 
+                               dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] + dummy_vars[,8] )  
+summary(gam_ssplines_avg_clust) # 46.6% R2 adj 
+
+
+
+
+
+
+
 
 
 
