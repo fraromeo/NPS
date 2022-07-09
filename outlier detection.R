@@ -129,13 +129,13 @@ games <- suppressWarnings(extract.mechanics(games.input=games))
 category.indices <- 23:92
 mechanic.indices <- 93:197
 
-tab.category = colSums(games[,category.indices])
+tab.category = colSums(games[,category.indices], na.rm=TRUE)
 summary(tab.category)
 few_sample.category = names(tab.category)[tab.category < 300]
 
-tab.mechanic = colSums(games[,mechanic.indices])
+tab.mechanic = colSums(games[,mechanic.indices], na.rm=TRUE)
 summary(tab.mechanic)
-few_sample.mechanic = names(tab.mechanic)[tab.mechanic < 300]
+few_sample.mechanic = names(tab.mechanic)[tab.mechanic < 600]
 
 games[,c(few_sample.category, few_sample.mechanic)] <- NULL
 
@@ -147,10 +147,11 @@ mechanic.indices <- 62:81
 games <- games[games$minage != 0,]
 games <- games[games$suggested_num_players != -1,]
 games <- games[games$playingtime != 0,]
+games[which((games$Worker.Placement) > 1), 'Worker.Placement'] <- 1
 
 ##### Robust Outlier Detection on categories and mechanics ####
 library(cbRw)
-
+games2 <- games
 for (ind in c(category.indices, mechanic.indices)){
   games[,ind] <- factor(games[, ind], levels = c('0', '1'))
 }
@@ -182,7 +183,7 @@ for (ind in category.indices){
 cor.mat <- round(cor(games[,category.indices]),2)
 
 #observe correlation matrix
-#x11()
+x11()
 corrplot(cor.mat, type="upper", order="hclust", 
          tl.col="black", tl.srt=45)
 
@@ -192,6 +193,7 @@ dist_mat <- 1/(co.oc+1)
 dist_mat <- as.dist(dist_mat)
 
 # observe dendrogram - 7 looks best
+#x11()
 dendo <- hclust(dist_mat, method='complete')
 plot(dendo, main='complete', hang=-0.1, xlab='', labels=F, cex=0.6, sub='')
 rect.clusters <- rect.hclust(dendo, k=7)
@@ -264,7 +266,7 @@ games <- games[games$numcomments > 100,]
 
 ##### Robust statistics on wanting/owning ####
 library(robustbase)
-fit_MCD <- covMcd(x = games[, c('wanting', 'owned', 'average', 'averageweight')], alpha = .99, nsamp = "best")
+fit_MCD <- covMcd(x = games[, c('wanting', 'owned', 'average', 'averageweight')], alpha = .95, nsamp = "best")
 fit_MCD
 #plot(fit_MCD,classic=TRUE)
 
@@ -350,6 +352,7 @@ category.gower_dist <-
 category.sil_width <- c(NA)
 
 for (i in 2:8) {  
+  set.seed(1234)
   category.pam_fit <- pam(category.gower_dist, diss = TRUE, k = i)  
   category.sil_width[i] <- category.pam_fit$silinfo$avg.width 
   cat("Done: ", i, 'Clusters\n')
@@ -369,12 +372,14 @@ category.sil_width %>%
   theme(plot.title = element_text(hjust = 0.5))
 
 # visualization
+set.seed(1234)
 category.pam_fit <- 
   category.gower_dist %>% 
   # diss = TRUE to treat argument as dissimilarity matrix
   pam(k = 6, diss = TRUE)
 
 library(Rtsne)
+x11()
 category.tsne_obj <- Rtsne(category.gower_dist, is_distance = TRUE)
 category.tsne_obj$Y %>%
   data.frame() %>%
@@ -400,8 +405,8 @@ category.pam_results <- category.clust_data %>%
   mutate_if(is.character, funs(factor(.)))
 
 category.pam_results %>% 
-  filter(cluster == 5) %>%
-  select(c(average.x, averageweight.x, averageweight.y, wanting, owned)) %>% 
+  filter(cluster == 6) %>%
+  select(c(average.x, averageweight.x, wanting, owned)) %>% 
   summary()
 
 
@@ -422,6 +427,7 @@ mechanic.gower_dist <-
 mechanic.sil_width <- c(NA)
 
 for (i in 2:8) {  
+  set.seed(1234)
   mechanic.pam_fit <- pam(mechanic.gower_dist, diss = TRUE, k = i)  
   mechanic.sil_width[i] <- mechanic.pam_fit$silinfo$avg.width 
   cat("Done: ", i, 'Clusters\n')
@@ -441,6 +447,7 @@ mechanic.sil_width %>%
   theme(plot.title = element_text(hjust = 0.5))
 
 # visualization
+set.seed(1234)
 mechanic.pam_fit <- 
   mechanic.gower_dist %>% 
   # diss = TRUE to treat argument as dissimilarity matrix
