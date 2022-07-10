@@ -6,6 +6,28 @@ games <- read.csv('clusterized_games3.csv')
 # for shapley value 
 source("shap.R")
 
+# for clusters
+compute.cooccurrence <- function(X) {
+  X <- as.matrix(X)
+  out <- crossprod(X)  # Same as: t(X) %*% X
+  #diag(out) <- 0       # (b/c you don't count co-occurrences of an aspect with itself)
+  out
+}
+most_common <- function(clust, num_cat, cat = T){
+  # num_cat = number of most common categories needed (e.g. three most common cat ...)
+  category.indices <-  24:62
+  if (cat){
+    ind_cl <- which(games$category.cluster.kmed == clust)
+  }else{
+    ind_cl <- which(games$mechanic.cluster.kmed == clust)
+  }
+  
+  games_no_fac <- sapply(games[ind_cl,category.indices], function(x) as.numeric(as.character(x)))
+  coocc <- diag(compute.cooccurrence(games_no_fac))
+  print(names(sort(coocc))[1:num_cat])
+}
+
+
 # others 
 perm_anova_twoway_interaction = function(outcome,factor1,factor2,iter=1e3){
   T0 <- summary.aov(aov(outcome ~ factor1 + factor2 + factor1:factor2))[[1]][3,4]
@@ -113,6 +135,11 @@ perm_anova_nway = function(outcome, short_formula, long_formula, to_test, iter=1
 
 
 
+
+#### characterization of groups ####
+
+most_common(4,3)
+
 #### permutational anova  wanting + owned ~ mechanic + category ####
 outcome <- games$wanting + games$owned 
 factor1 <- games$category.cluster.kmed
@@ -139,8 +166,8 @@ perm_anova_twoway_factor12(outcome, factor1 = factor1,
 outcome <- games$average
 factor1 <- games$category.cluster.kmed
 factor2 <- games$mechanic.cluster.kmed
-boxplot(outcome ~  factor1, col = unique(factor1 + 1 ), xlab = 'categories') 
-boxplot(outcome ~  factor2, col = unique(factor2 + 1 ), xlab = 'mechanics')
+boxplot(outcome ~  factor1, col = unique(factor1 + 1 ), ylab = 'average rating', xlab = 'clusters of categories', pch = 19, cex = 0.5) 
+boxplot(outcome ~  factor2, col = unique(factor2 + 1 ), ylab = 'average rating', xlab = 'clusters of mechanics', pch = 19, cex = 0.5)
 
 B = 1000
 seed = 2022
@@ -155,6 +182,7 @@ perm_anova_twoway_factor12(outcome, factor1 = factor1,
 # ways in which the i-th group are "belonging or not to the ith group"
 
 #### permutational anova multiple ways  average ~ category ####
+
 outcome <- games$average
 dummy_vars <- fastDummies::dummy_cols(games$category.cluster.kmed)
 boxplot(outcome ~  games$category.cluster.kmed, col = unique(games$category.cluster.kmed + 1)) 
@@ -478,8 +506,13 @@ model = xgb.train(data = xgb_train, max.depth = 6, watchlist = watchlist_xgb, nr
 # model is worse so also here is better the model without categories 
 
 
+games$new_cat <- ifelse(games$category.cluster.kmed == 4 |games$category.cluster.kmed == 5 , 2 , 0)
+zero_ind <- which(games$new_cat == 0)
+games$new_cat[zero_ind] <- ifelse(games$category.cluster.kmed[zero_ind] == 1 |games$category.cluster.kmed[zero_ind] == 2 | games$category.cluster.kmed[zero_ind] == 6 , 1 , 0)
+x6 <- as.factor(games$new_cat[ind])
 
-
+gam_ssplines_avg_cl = gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr')  + s(x5, bs='cr'))  
+summary(gam_ssplines_avg_cl)
 
 #### conformal prediction for gam models ####
 
