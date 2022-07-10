@@ -6,11 +6,15 @@
 ## functions for plot
 # return matrix of shap score and mean ranked score list
 shap.score.rank <- function(xgb_model = xgb_mod, shap_approx = TRUE, 
-                            X_train = mydata$train_mm){
+                            X_train = mydata$train_mm, gam = F){
   require(xgboost)
   require(data.table)
-  shap_contrib <- predict(xgb_model, X_train,
+  if (gam){
+    shap_contrib <- predict(xgb_model, X_train, type = 'terms')
+  }else{
+    shap_contrib <- predict(xgb_model, X_train,
                           predcontrib = TRUE, approxcontrib = shap_approx)
+  }
   shap_contrib <- as.data.table(shap_contrib)
   shap_contrib[,BIAS:=NULL]
   cat('make SHAP score by decreasing order\n\n')
@@ -93,7 +97,7 @@ var_importance <- function(shap_result, top_n=10)
   var_importance=var_importance[1:top_n,]
   
   ggplot(var_importance, aes(x=reorder(var,importance), y=importance)) + 
-    geom_bar(stat = "identity", fill = 'red', col = 'red') + 
+    geom_bar(stat = "identity", fill = 'dark red', col = 'dark red') + 
     coord_flip() + 
     theme_light() + 
     theme(axis.title.y=element_blank()) 

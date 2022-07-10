@@ -583,7 +583,12 @@ gam_ssplines = gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr'))
 summary(gam_ssplines) # 60% R^2 adjusted 
 
 
-
+#### don't run 
+explainer <- shapr(df_train,  gam_ssplines)
+p <- mean(y)
+df_test <- data.frame( x1 = games$suggested_num_players[-ind], x2 = games$minage[-ind], x3 = games$playingtime[-ind])
+explanation <- explain(df_test,approach = "empirical",explainer = explainer, prediction_zero = p )
+plot(explanation, plot_phi0 = FALSE, index_x_test = c(1, 6,10))
 
 
 
@@ -706,6 +711,346 @@ abline(v=T0,col=3,lwd=4)
 p_val <- sum(T_stat>=T0)/B
 p_val # difference is significant 
 # you can do it also with "average" -> still difference
+
+
+
+#### permutational anova  wanting + owned ~   low_avgw < avg_weight < high_avgw ####
+outcome <- games$wanting + games$owned 
+low_avgw = 2.5
+high_avgw = 3
+
+boxplot(outcome  ~ I(games$averageweight < high_avgw & games$averageweight > low_avgw)) 
+
+B = 1000
+seed = 2022
+
+fit <- aov( outcome ~  I(games$averageweight < high_avgw & games$averageweight > low_avgw))
+T0 <- summary(fit)[[1]][1,4]
+
+T_stat <- numeric(B)
+n <- length(outcome)
+for(i in 1:B){
+  perm <- sample(1:n)
+  outcome_perm <- outcome[perm]
+  fit_p <- aov( outcome_perm ~ I(games$averageweight < high_avgw & games$averageweight > low_avgw) )
+  T_stat[i] <- summary(fit_p)[[1]][1,4]
+  
+}
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30)
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=range(c(T_stat,T0)))
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val # difference between groups 
+
+aggregate(outcome, list(I(games$averageweight < high_avgw & games$averageweight > low_avgw)), FUN = mean)
+
+# groups with avgweight between 2.5 and 3 have higher wanting + owned on average 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### permutational anova  wanting ~  low_avgw < avg_weight < high_avgw & cluster ####
+
+low_avgw = 2.5
+high_avgw = 3
+boxplot(games$wanting ~ I(games$averageweight < high_avgw & games$averageweight > low_avgw) + games$cluster) 
+
+B = 1000
+
+perm_anova_twoway_interaction(games$wanting, factor1 = I(games$averageweight < high_avgw & games$averageweight > low_avgw), 
+                              factor2 = games$cluster, iter = B)
+# interaction term is significant 
+perm_anova_twoway_factor12(games$wanting, factor1 = I(games$averageweight < high_avgw & games$averageweight > low_avgw), 
+                           factor2 = games$cluster, interac = TRUE, iter = B)
+# games$cluster is not significant, the first factor is significant. 
+# better to remain with the simpler model with only first factor 
+
+
+
+
+#### permutational anova  wanting ~  low_avgw < avg_weight < high_avgw ####
+low_avgw = 2.5
+high_avgw = 3
+boxplot(games$wanting ~ I(games$averageweight < high_avgw & games$averageweight > low_avgw)) 
+length(which(games$averageweight < high_avgw & games$averageweight > low_avgw)) # 1587 
+B = 1000
+seed = 26111992
+fit <- aov(games$wanting ~ I(games$averageweight < high_avgw & games$averageweight > low_avgw))
+T0 <- summary(fit)[[1]][1,4]
+
+T_stat <- numeric(B)
+n <- length(games$wanting)
+for(i in 1:B){
+  perm <- sample(1:n)
+  want_perm <- games$wanting[perm]
+  fit_p <- aov( want_perm ~ I(games$averageweight < high_avgw & games$averageweight > low_avgw) )
+  T_stat[i] <- summary(fit_p)[[1]][1,4]
+  
+}
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30)
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=range(c(T_stat,T0)))
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val
+# significative difference: from the boxplot we can see that games with complexity 
+# between 2.5 and three are more wanted 
+
+
+#### permutational anova  average ~  low_avgw < avg_weight < high_avgw & cluster ####
+
+low_avgw = 2.5
+high_avgw = 3
+boxplot(games$average ~ I(games$averageweight < high_avgw & games$averageweight > low_avgw) + games$cluster) 
+
+B = 1000
+
+perm_anova_twoway_interaction(games$average, factor1 = I(games$averageweight < high_avgw & games$averageweight > low_avgw), 
+                              factor2 = games$cluster, iter = B)
+# interaction term is not significant 
+perm_anova_twoway_factor12(games$average, factor1 = I(games$averageweight < high_avgw & games$averageweight > low_avgw), 
+                           factor2 = games$cluster, interac = FALSE, iter = B)
+# both terms are significant
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### permutational anova  averageweight ~   cluster ####
+outcome <- games$averageweight
+boxplot(outcome ~  games$cluster) 
+
+
+B = 1000
+seed = 2022
+
+fit <- aov( outcome ~  games$cluster)
+T0 <- summary(fit)[[1]][1,4]
+
+T_stat <- numeric(B)
+n <- length(outcome)
+for(i in 1:B){
+  perm <- sample(1:n)
+  outcome_perm <- outcome[perm]
+  fit_p <- aov( outcome_perm ~ games$cluster )
+  T_stat[i] <- summary(fit_p)[[1]][1,4]
+  
+}
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30)
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=range(c(T_stat,T0)))
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val # difference between groups 
+
+
+
+
+
+#### permutational anova  average ~   cluster ####
+outcome <- games$average
+boxplot(outcome ~  games$category.cluster) 
+
+
+B = 1000
+seed = 2022
+
+fit <- aov( outcome ~  games$category.cluster)
+T0 <- summary(fit)[[1]][1,4]
+
+T_stat <- numeric(B)
+n <- length(outcome)
+for(i in 1:B){
+  perm <- sample(1:n)
+  outcome_perm <- outcome[perm]
+  fit_p <- aov( outcome_perm ~ games$category.cluster )
+  T_stat[i] <- summary(fit_p)[[1]][1,4]
+  
+}
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30)
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=range(c(T_stat,T0)))
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val # difference between groups 
+
+
+
+
+
+
+
+#### permutational anova multiple ways  average ~   cluster ####
+outcome <- games$average
+dummy_vars <- fastDummies::dummy_cols(games$cluster)
+boxplot(outcome ~  games$cluster, col = unique(games$cluster + 1)) 
+
+# remember that first col of dummy_vars is general data, is not a cluster, so i-th col is i-th -1 cluster
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 6) # pval 0 6th cluster is significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 5) # pval 0 5th cluster is significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 4) # pval 0 4th cluster is significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3]+ dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 3) # pval 0.78 3th cluster is not significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 2) # pval 0.814 2th cluster is not significant 
+
+short_formula <- outcome ~  dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 1) # pval 0 1st cluster is significant 
+## last group  
+short_formula <- outcome ~  dummy_vars[,2] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] + dummy_vars[,8]
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 5) # pval 0.035, not significant (given that we did multiple tests)
+
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7]
+
+final_model <- aov(long_formula)
+final_model$coefficient
+
+## belonging to 4th and 5th group increases the average, 6th and 1st decreases it 
+
+
+
+
+
+
+
+#### permutational anova multiple ways  average weight ~   cluster ####
+outcome <- games$averageweight
+dummy_vars <- fastDummies::dummy_cols(games$cluster)
+boxplot(outcome ~  games$cluster, col = unique(dummy_vars[,1] +1)) 
+
+# remember that first col of dummy_vars is general data, is not a cluster, so i-th col is i-th -1 cluster
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 6) # pval 0 6th cluster is significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 5) # pval 0 5th cluster is significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 4) # pval 0 4th cluster is significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3]+ dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 3) # pval 1 3th cluster is not significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 2) # pval 0 2th cluster is  significant 
+
+short_formula <- outcome ~   dummy_vars[,3] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 1) # pval 0 1st cluster is significant 
+## last group  
+short_formula <- outcome ~  dummy_vars[,2]+ dummy_vars[,3] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2]+ dummy_vars[,3] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] + dummy_vars[,8]
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 6) # pval 0.035, not significant (given that we did multiple tests)
+
+long_formula <- outcome ~ dummy_vars[,2]+ dummy_vars[,3] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7]+ dummy_vars[,8]
+
+final_model <- aov(long_formula)
+final_model$coefficient
+
+## belonging to 2nd 4th and 5th group increases the average, 6th and 1st  and 7th decreases it 
+
+
+
+
+
+
+
+#### permutational anova multiple ways  wanting + owned ~   cluster ####
+outcome <- games$wanting + games$owned
+dummy_vars <- fastDummies::dummy_cols(games$cluster)
+boxplot(outcome ~  games$cluster, col = unique(dummy_vars[,1] +1)) 
+
+# remember that first col of dummy_vars is general data, is not a cluster, so i-th col is i-th -1 cluster
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 6) # pval 0.018 6th cluster is significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5] + dummy_vars[,6] + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 5) # pval 0.71 5th cluster is not significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5]  + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 4) # pval 0 4th cluster is significant 
+
+short_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,5]  +dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3] + dummy_vars[,4] + dummy_vars[,5]  + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 3) # pval 0.93 3th cluster is not significant 
+
+short_formula <- outcome ~ dummy_vars[,2]  + dummy_vars[,5]  +dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3]  + dummy_vars[,5]  + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 2) # pval 0 2th cluster is  significant 
+
+short_formula <- outcome ~ dummy_vars[,3]  + dummy_vars[,5]  +dummy_vars[,7] 
+long_formula <- outcome ~ dummy_vars[,2] + dummy_vars[,3]  + dummy_vars[,5]  + dummy_vars[,7] 
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 1) # pval 0.31 1st cluster is not significant 
+## last group  
+short_formula <- outcome ~ dummy_vars[,3]  + dummy_vars[,5]  + dummy_vars[,7] 
+long_formula <- outcome ~  dummy_vars[,3]  + dummy_vars[,5]  + dummy_vars[,7] +dummy_vars[,8]
+pval <- perm_anova_nway(outcome, short_formula, long_formula, 4) # pval 0.001 significant 
+
+long_formula <- outcome ~ dummy_vars[,3]  + dummy_vars[,5]  + dummy_vars[,7] +dummy_vars[,8]
+
+final_model <- aov(long_formula)
+final_model$coefficient
+
+## belonging to 2nd 4th group increases the wanting + owned, 6th and 7th decreases it 
+
+
+
 
 
 
