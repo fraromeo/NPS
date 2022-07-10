@@ -502,7 +502,7 @@ conf_preds_split$pred
 
 
 
-
+#### some plots ####
 library(mgcViz)
 try <- getViz(gam_ssplines_avg)
 pl <- plot(try) + l_points(pch = 19, cex = 0.5) + l_fitLine(linetype = 1, col = 'blue')  +
@@ -510,3 +510,16 @@ pl <- plot(try) + l_points(pch = 19, cex = 0.5) + l_fitLine(linetype = 1, col = 
 print(pl, pages = 1)
 #plot(try, select = 1) + l_dens(type = "cond") + l_fitLine() + l_ciLine()
 plotRGL(sm(try, 1), fix = c("x3" = 0), residuals = TRUE)
+
+
+#### GAMlasso ####
+
+games$mat <- model.matrix(~ games[,24:82] ,data = games)[,-1]
+gfit <- gamlasso(wanting ~ mat + s(year, k = 5 , bs = 'ts')+ s(suggested_num_players, k = 5, bs = 'ts')+ s(playingtime, k = 5, bs = 'ts')+ s(minage, k = 5 ,bs = 'ts')+ s(averageweight, k = 5 ,bs = 'ts'), data = games)
+summary(gfit)
+
+gfit <- gam(wanting ~ Childrens.Game + s(year, bs = 'cs')+ s(suggested_num_players, bs = 'cs')+ s(playingtime, bs = 'cs')+ s(minage, bs = 'cs')+ s(averageweight, bs = 'cs'), data = games)
+summary(gfit)
+
+
+
