@@ -142,12 +142,82 @@ games[,c(few_sample.category, few_sample.mechanic)] <- NULL
 names(games)
 category.indices <- 23:61
 mechanic.indices <- 62:81
+
+##### Boxplot of categories ####
+df.cat.bplot <- data.frame()
+for (i in 1:dim(games)[1]){
+  for (j in category.indices){
+    if (games[i,j] == 1) {
+      l = list(name=games[i,]$name, category=names(games)[j], average=games[i,]$average)
+      df.cat.bplot <- rbind(df.cat.bplot, l)
+    }
+  }
+  
+  if (i%%500 == 0) {
+    print(i)
+  }
+}
+
+library(hrbrthemes)
+library(viridis)
+
+df.cat.bplot$category = with(df.cat.bplot, reorder(category, average, median))
+df.cat.bplot %>%
+  mutate(category=fct_lump(category, 10)) %>%
+  ggplot(aes(x=category, y=average, fill=category)) +
+  geom_boxplot() +
+  coord_flip() + 
+  theme_ipsum() +
+  theme(legend.position="none") + 
+  geom_jitter(color="black", size=0.05, alpha=0.1) +
+  xlab('')
+  
+
 ##### Cleaning minage, playingtime, suggplayers #####
 
 games <- games[games$minage != 0,]
 games <- games[games$suggested_num_players != -1,]
 games <- games[games$playingtime != 0,]
 games[which((games$Worker.Placement) > 1), 'Worker.Placement'] <- 1
+
+
+##### Some Plots ####
+games <- games[games$year > 1900 & games$year < 2021,]
+
+games %>%
+  count(year) %>%
+  arrange(desc(year)) %>%
+  ggplot(aes(year, n)) +
+  geom_line()
+
+games %>%
+  ggplot(aes(average)) +
+  geom_histogram(binwidth=0.15)
+
+games %>%
+  filter(maxplaytime > 5, maxplaytime < 1000) %>%
+  ggplot(aes(maxplaytime / 60)) +
+  geom_histogram(binwidth=.25) +
+  scale_x_log10(breaks= 2^seq(-2,4))
+
+games %>%
+  filter(suggested_num_players < 15) %>%
+  ggplot(aes(suggested_num_players)) + geom_histogram(binwidth = 1)
+
+
+games %>%
+  group_by(y5 = 5 * (year %/% 5)) %>%
+  summarize(average_rating = mean(average)) %>%
+  ggplot(aes(y5, average_rating)) + 
+  geom_line()
+
+
+
+
+lm(average ~ I(log2(suggested_num_players))
+   + I(log2(maxplaytime/60)) + year, games)%>%
+  summary()
+
 
 ##### Robust Outlier Detection on categories and mechanics ####
 library(cbRw)
