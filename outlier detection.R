@@ -162,6 +162,7 @@ library(hrbrthemes)
 library(viridis)
 
 df.cat.bplot$category = with(df.cat.bplot, reorder(category, average, median))
+x11()
 df.cat.bplot %>%
   mutate(category=fct_lump(category, 10)) %>%
   ggplot(aes(x=category, y=average, fill=category)) +
@@ -169,9 +170,40 @@ df.cat.bplot %>%
   coord_flip() + 
   theme_ipsum() +
   theme(legend.position="none") + 
-  geom_jitter(color="black", size=0.05, alpha=0.1) +
-  xlab('')
+  xlab('') +
+  ggtitle("Rating boxplot vs game category")
   
+
+##### Boxplot of mechanics ####
+df.mech.bplot <- data.frame()
+for (i in 1:dim(games)[1]){
+  for (j in mechanic.indices){
+    if (games[i,j] == 1) {
+      l = list(name=games[i,]$name, mechanic=names(games)[j], average=games[i,]$average)
+      df.mech.bplot <- rbind(df.mech.bplot, l)
+    }
+  }
+  
+  if (i%%500 == 0) {
+    print(i)
+  }
+}
+
+library(hrbrthemes)
+library(viridis)
+
+df.mech.bplot$mechanic = with(df.mech.bplot, reorder(mechanic, average, median))
+x11()
+df.mech.bplot %>%
+  mutate(mechanic=fct_lump(mechanic, 10)) %>%
+  ggplot(aes(x=mechanic, y=average, fill=mechanic)) +
+  geom_boxplot() +
+  coord_flip() + 
+  theme_ipsum() +
+  theme(legend.position="none") + 
+  xlab('') +
+  ggtitle("Rating boxplot vs game mechanic")
+
 
 ##### Cleaning minage, playingtime, suggplayers #####
 
@@ -184,40 +216,45 @@ games[which((games$Worker.Placement) > 1), 'Worker.Placement'] <- 1
 ##### Some Plots ####
 games <- games[games$year > 1900 & games$year < 2021,]
 
+x11()
 games %>%
   count(year) %>%
   arrange(desc(year)) %>%
   ggplot(aes(year, n)) +
-  geom_line()
+  geom_line() + theme_bw() + theme(axis.text = element_text(size = 12), 
+                                   axis.title = element_text(size = 14),
+                                   plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm")) 
 
 games %>%
   ggplot(aes(average)) +
-  geom_histogram(binwidth=0.15)
+  geom_histogram(binwidth=0.05) + theme_bw() + 
+  geom_vline(aes(xintercept = mean(average)), colour="red")
+
+x11()
+games %>%
+  ggplot(aes(averageweight)) +
+  geom_histogram(binwidth=0.05) + theme_bw() +
+  geom_vline(aes(xintercept = mean(averageweight)), colour="red")
 
 games %>%
   filter(maxplaytime > 5, maxplaytime < 1000) %>%
   ggplot(aes(maxplaytime / 60)) +
   geom_histogram(binwidth=.25) +
-  scale_x_log10(breaks= 2^seq(-2,4))
+  scale_x_log10(breaks= 2^seq(-2,4)) + theme_bw()
 
 games %>%
   filter(suggested_num_players < 15) %>%
-  ggplot(aes(suggested_num_players)) + geom_histogram(binwidth = 1)
+  ggplot(aes(suggested_num_players)) + geom_histogram(binwidth = 1) + theme_bw()
 
-
+x11()
 games %>%
   group_by(y5 = 5 * (year %/% 5)) %>%
   summarize(average_rating = mean(average)) %>%
   ggplot(aes(y5, average_rating)) + 
-  geom_line()
-
-
-
-
-lm(average ~ I(log2(suggested_num_players))
-   + I(log2(maxplaytime/60)) + year, games)%>%
-  summary()
-
+  ylab('Average Rating') + xlab('year') +
+  geom_line() + theme_bw() + theme(axis.text = element_text(size = 12), 
+                                   axis.title = element_text(size = 14),
+                                   plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm")) 
 
 ##### Robust Outlier Detection on categories and mechanics ####
 library(cbRw)
@@ -404,6 +441,29 @@ ggarrange(NULL, complexity.dplot, wanting.dplot,
 games <- games[games.plot$status == 'inlier',]
 
 #write.csv(games, 'clusterized_games2.csv')
+
+##### MCA #####
+mca.indices <- c(23:37)#c(23:35)
+for (ind in mca.indices){
+  games[,ind] <- as.factor(games[, ind])
+}
+res.mca = MCA(games[,c(mca.indices, 13)], quanti.sup=6)
+
+
+barplot(res.mca$eig[,1], main = "Eigenvalues", 
+        names.arg = paste("Dim", 1:nrow(res.mca$eig), sep = ""))
+abline(h = 1 / (length(mca.indices)), col='red')
+
+plot(cumsum(res.mca$eig[,1]), type='o', axes=T, xlab='number of components', 
+     ylab='contribution to the total variance', ylim=c(0,1))
+abline(h=1, col='blue')
+abline(h=0.8, lty=2, col='blue')
+
+options(ggrepel.max.overlaps = Inf)
+plot(res.mca,invisible=c("ind"), selectMod="contrib 10", unselect=0.9)
+plot(res.mca,invisible=c("ind"), axes = c(1, 3), selectMod="cos2 10", unselect=1)
+plot(res.mca, choix="quanti.sup", axes = c(1, 3), unselect=1)
+
 ###### K-medoids Categories #####
 library(cluster)
 
