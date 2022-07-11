@@ -677,29 +677,3 @@ games %>%
 ##### Save File #####
 #write.csv(games, 'clusterized_games3.csv')
 
-library(plsmselect)
-library(dbarts)
-games$X = makeModelMatrixFromDataFrame(games[, category.indices])
-gfit = gamlasso(average ~ X +
-                  s(year, bs="cs") +
-                  s(averageweight, bs="cs") +
-                  s(playingtime, bs="cs"),
-                  data=games,
-                  seed=1)
-
-summary(gfit)
-
-
-
-games$X1 = makeModelMatrixFromDataFrame(data.frame(games[,'category.cluster.kmed']))
-gfit = gamlasso(average ~ X1 +
-                  s(year, bs="cs") +
-                  s(averageweight, bs="cs") +
-                  s(playingtime, bs="cs"),
-                data=games,
-                seed=1)
-
-summary(gfit)
-summary(gfit$gam)
-summary(gfit$cv.glmnet)
-
