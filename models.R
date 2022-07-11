@@ -12,6 +12,8 @@ library(xgboost)
 library(GGally)
 library(dplyr)
 library(tidyverse)
+library(conformalInference)
+library(dbscan)
 #### functions ####
 # for shapley value 
 source("shap.R")
