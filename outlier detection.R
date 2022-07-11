@@ -258,17 +258,21 @@ games %>%
 
 ##### Robust Outlier Detection on categories and mechanics ####
 library(cbRw)
-games2 <- games
+
 for (ind in c(category.indices, mechanic.indices)){
   games[,ind] <- factor(games[, ind], levels = c('0', '1'))
 }
 
 value <- cbrw(games[, c(category.indices, mechanic.indices)])
-out.ind <- value$score > quantile(value$score, 0.995)
+out.ind <- value$score > quantile(value$score, 0.95)
 out.name <- games$name[out.ind]
+out.id <- games$id[out.ind]
 plot(games$averageweight, games$average, col=ifelse(value$score > quantile(value$score, 0.99), 'red', 'black'))
 
-games[games$name==out.name[1], c(category.indices, mechanic.indices)]
+summary(games[out.ind, c(category.indices, mechanic.indices)])
+summary(games[-out.ind, c(category.indices, mechanic.indices)])
+
+games[games$name==out.name[13], c(category.indices, mechanic.indices)]
 games <- games[-out.ind,]
 
 ##### Clustering #######
@@ -373,7 +377,13 @@ games <- games[games$numcomments > 100,]
 
 ##### Robust statistics on wanting/owning ####
 library(robustbase)
-fit_MCD <- covMcd(x = games[, c('wanting', 'owned', 'average', 'averageweight')], alpha = .95, nsamp = "best")
+g2 <- games
+g2$wanting <- g2$wanting / IQR(g2$wanting)
+g2$owned <- g2$owned / IQR(g2$owned)
+g2$average <- g2$average / IQR(g2$average)
+g2$averageweight <- g2$averageweight / IQR(g2$averageweight)
+
+fit_MCD <- covMcd(x = g2[, c('wanting', 'owned', 'average', 'averageweight')], alpha = .95, nsamp = "best")
 fit_MCD
 #plot(fit_MCD,classic=TRUE)
 
@@ -433,9 +443,9 @@ x11()
 ggarrange(NULL, complexity.dplot, wanting.dplot,
           owned.dplot, sp.oc, sp.wo, 
           average.dplot, sp.ac, sp.wa, 
-          labels = c("A", "B", "C", 
-                     'D', 'E', 'F', 
-                     'G', 'H', 'I'),
+          #labels = c("A", "B", "C", 
+          #           'D', 'E', 'F', 
+          #           'G', 'H', 'I'),
           ncol = 3, nrow = 3, align='hv', common.legend = TRUE, legend = "top")
 
 games <- games[games.plot$status == 'inlier',]
@@ -443,11 +453,14 @@ games <- games[games.plot$status == 'inlier',]
 #write.csv(games, 'clusterized_games2.csv')
 
 ##### MCA #####
-mca.indices <- c(23:37)#c(23:35)
+# Not particularly interesting
+library(FactoMineR)
+mca.indices <- category.indices#c(23:35)
+g.mca <- games
 for (ind in mca.indices){
-  games[,ind] <- as.factor(games[, ind])
+  g.mca[,ind] <- as.factor(games[, ind])
 }
-res.mca = MCA(games[,c(mca.indices, 13)], quanti.sup=6)
+res.mca = MCA(g.mca[,c(mca.indices, 13)], quanti.sup=40)
 
 
 barplot(res.mca$eig[,1], main = "Eigenvalues", 
@@ -461,8 +474,8 @@ abline(h=0.8, lty=2, col='blue')
 
 options(ggrepel.max.overlaps = Inf)
 plot(res.mca,invisible=c("ind"), selectMod="contrib 10", unselect=0.9)
-plot(res.mca,invisible=c("ind"), axes = c(1, 3), selectMod="cos2 10", unselect=1)
-plot(res.mca, choix="quanti.sup", axes = c(1, 3), unselect=1)
+plot(res.mca,invisible=c("ind"), axes = c(1, 2), selectMod="cos2 10", unselect=1)
+plot(res.mca, choix="quanti.sup", axes = c(1, 2), unselect=1)
 
 ###### K-medoids Categories #####
 library(cluster)
@@ -499,7 +512,7 @@ category.sil_width %>%
   labs(title = 'Silhouette Widths of k-medoid Clusters',
        x     = "Number of clusters",
        y     = 'Silhouette Width') +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(plot.title = element_text(hjust = 0.5),axis.text = element_text(size = 12), axis.title = element_text(size = 14))
 
 # visualization
 set.seed(1234)
@@ -507,6 +520,7 @@ category.pam_fit <-
   category.gower_dist %>% 
   # diss = TRUE to treat argument as dissimilarity matrix
   pam(k = 6, diss = TRUE)
+
 
 library(Rtsne)
 x11()
@@ -583,6 +597,7 @@ mechanic.pam_fit <-
   # diss = TRUE to treat argument as dissimilarity matrix
   pam(k = 6, diss = TRUE)
 
+x11()
 mechanic.tsne_obj <- Rtsne(mechanic.gower_dist, is_distance = TRUE)
 mechanic.tsne_obj$Y %>%
   data.frame() %>%
@@ -613,7 +628,78 @@ mechanic.pam_results %>%
   summary()
 
 
-##### Add column
+##### Add column #####
 games[,'category.cluster.kmed'] <- as.factor(category.pam_fit$clustering)
 games[,'mechanic.cluster.kmed'] <- as.factor(mechanic.pam_fit$clustering)
-write.csv(games, 'clusterized_games3.csv')
+
+##### Generate Plots #####
+x11()
+games$category.cluster.kmed = with(games, reorder(category.cluster.kmed, averageweight, median))
+games %>%
+  ggplot(aes(x=category.cluster.kmed, y=averageweight, fill=category.cluster.kmed))+
+  geom_boxplot() +
+  coord_flip() + 
+  theme_ipsum() +
+  theme(legend.position="none") + 
+  xlab('') +
+  ggtitle("Averageweight boxplot vs game category cluster")
+
+games$mechanic.cluster.kmed = with(games, reorder(mechanic.cluster.kmed, averageweight, median))
+games %>%
+  ggplot(aes(x=mechanic.cluster.kmed, y=averageweight, fill=mechanic.cluster.kmed))+
+  geom_boxplot() +
+  coord_flip() + 
+  theme_ipsum() +
+  theme(legend.position="none") + 
+  xlab('') +
+  ggtitle("Averageweight boxplot vs game mechanic cluster")
+
+games$category.cluster.kmed = with(games, reorder(category.cluster.kmed, average, median))
+games %>%
+  ggplot(aes(x=category.cluster.kmed, y=average, fill=category.cluster.kmed))+
+  geom_boxplot() +
+  coord_flip() + 
+  theme_ipsum() +
+  theme(legend.position="none") + 
+  xlab('') +
+  ggtitle("Average boxplot vs game category cluster")
+
+games$mechanic.cluster.kmed = with(games, reorder(mechanic.cluster.kmed, average, median))
+games %>%
+  ggplot(aes(x=mechanic.cluster.kmed, y=average, fill=mechanic.cluster.kmed))+
+  geom_boxplot() +
+  coord_flip() + 
+  theme_ipsum() +
+  theme(legend.position="none") + 
+  xlab('') +
+  ggtitle("Average boxplot vs game mechanic cluster")
+
+##### Save File #####
+#write.csv(games, 'clusterized_games3.csv')
+
+library(plsmselect)
+library(dbarts)
+games$X = makeModelMatrixFromDataFrame(games[, category.indices])
+gfit = gamlasso(average ~ X +
+                  s(year, bs="cs") +
+                  s(averageweight, bs="cs") +
+                  s(playingtime, bs="cs"),
+                  data=games,
+                  seed=1)
+
+summary(gfit)
+
+
+
+games$X1 = makeModelMatrixFromDataFrame(data.frame(games[,'category.cluster.kmed']))
+gfit = gamlasso(average ~ X1 +
+                  s(year, bs="cs") +
+                  s(averageweight, bs="cs") +
+                  s(playingtime, bs="cs"),
+                data=games,
+                seed=1)
+
+summary(gfit)
+summary(gfit$gam)
+summary(gfit$cv.glmnet)
+
