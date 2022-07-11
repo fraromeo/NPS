@@ -1,7 +1,17 @@
 rm(list=ls())
 games <- read.csv('clusterized_games3.csv')
 
-
+library(car)
+library(mgcv)
+library(rgl)
+library(splines)
+library(pbapply)
+library(np)
+library(rgl)
+library(xgboost)
+library(GGally)
+library(dplyr)
+library(tidyverse)
 #### functions ####
 # for shapley value 
 source("shap.R")
@@ -162,7 +172,7 @@ perm_anova_oneway = function(outcome,factor,iter=1e3){
 
 
 #### characterization of groups ####
-most_common(1,3)
+most_common(1,3) # three most common categories in first cluster 
 most_common(2,3)
 most_common(3,1)
 most_common(4,1)
@@ -411,28 +421,6 @@ x4 <- as.factor(games$category.cluster.kmed[ind])
 gam_ssplines_cl = gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + x4) 
 summary(gam_ssplines_cl) # 70% R^2 adj  -> better stay with simpler model 
 
-## trying to add clusters on categories for xgboost
-df_train <- as.matrix(data.frame(x1 = x1, x2 = x2, x3 = x3, x4 = games$category.cluster.kmed[ind]))
-df_test <- as.matrix(data.frame( x1 = games$suggested_num_players[-ind], x2 = games$minage[-ind], x3 = games$playingtime[-ind], x4 = games$category.cluster.kmed[-ind]))
-xgb_train = xgb.DMatrix(data = df_train, label = y)
-xgb_test = xgb.DMatrix(data = df_test, label = games$averageweight[-ind])
-watchlist_xgb = list(train=xgb_train, test = xgb_test )
-model = xgb.train(data = xgb_train, max.depth = 6, watchlist = watchlist_xgb, nrounds = 70)
-xgb_avgw_cl <- xgboost(data = xgb_train, 
-                    nround = 10, 
-                    objective="reg:linear",
-                    label = y)
-shap_result_avgw_cl = shap.score.rank(xgb_model = xgb_avgw_cl, 
-                                   X_train = df_train,
-                                   shap_approx = F
-)
-var_importance(shap_result_avgw_cl, top_n=4)
-shap_long_avgw_cl = shap.prep(shap = shap_result_avgw_cl,
-                           X_train = df_train, 
-                           top_n = 4
-)
-plot.shap.summary(data_long = shap_long_avgw_cl)
-
 ### Gam lasso 
 
 library(plsmselect)
@@ -478,10 +466,11 @@ local_model = npreg(y ~ x,
 
 
 # plot
+
 x.grid = data.frame(x=seq(range(x)[1],range(x)[2],by=0.1))
 preds=predict(local_model, newdata=x.grid, se=T)
 se.bands=cbind(preds$fit+2*preds$se.fit, preds$fit-2*preds$se.fit)
-plot(x, y, xlim = range(x.grid$x), cex=.5, col="darkgrey")
+plot(x, y, xlim = range(x.grid$x), cex=.5, col="black", xlab = "average complexity", ylab = "average rating")
 lines(x.grid$x, preds$fit, lwd =2, col="blue")
 matlines(x.grid$x, se.bands, lwd =1, col="blue", lty =3)
 
@@ -550,39 +539,18 @@ sqrt(1/n_test * sum((fit_test_xg - y_test )^2))
 fit_test_gam <- predict(gam_ssplines_avg, df_test)
 sqrt(1/n_test * sum((fit_test_gam - y_test )^2))
 # gam works better between these two 
-
 df_test_nploc <- data.frame(x = games$averageweight[-ind] )
 fit_test_nploc <- predict(local_model, newdata = df_test_nploc )
 rmse <- sqrt(1/n_test * sum((fit_test_nploc - y_test )^2))
 rmse
-# the local method is the best on the test set 
+ 
 
 ## trying to add cluster on categories for gam
-
 x6 <- as.factor(games$category.cluster.kmed[ind])
 gam_avg_cl <- gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr') + s(x4, bs='cr') + x6)  
 summary(gam_avg_cl) # 53.2 % -> better stay with the simpler model 
 
-## trying to add cluster on categories for xgboost
 
-df_train <- as.matrix(data.frame(x1 = x1, x2 = x2, x3 = x3, x4 = x4, x5 = x5, x6 = games$category.cluster.kmed[ind]))
-df_test <- as.matrix(data.frame( x1 = games$suggested_num_players[-ind], x2 = games$minage[-ind], x3 = games$playingtime[-ind],
-                                 x4 = games$averageweight[-ind], x5 = games$year[-ind], x6 = games$category.cluster.kmed[-ind]))
-
-xgb_train = xgb.DMatrix(data = df_train, label = y)
-xgb_test = xgb.DMatrix(data = df_test, label = games$average[-ind])
-watchlist_xgb = list(train=xgb_train, test = xgb_test )
-model = xgb.train(data = xgb_train, max.depth = 6, watchlist = watchlist_xgb, nrounds = 70)
-# model is worse so also here is better the model without categories 
-
-
-games$new_cat <- ifelse(games$category.cluster.kmed == 4 |games$category.cluster.kmed == 5 , 2 , 0)
-zero_ind <- which(games$new_cat == 0)
-games$new_cat[zero_ind] <- ifelse(games$category.cluster.kmed[zero_ind] == 1 |games$category.cluster.kmed[zero_ind] == 2 | games$category.cluster.kmed[zero_ind] == 6 , 1 , 0)
-x6 <- as.factor(games$new_cat[ind])
-
-gam_ssplines_avg_cl = gam(y ~ s(x1, bs='cr') + s(x2, bs='cr') + s(x3, bs='cr')  + s(x5, bs='cr'))  
-summary(gam_ssplines_avg_cl)
 
 #### conformal prediction for gam models ####
 
@@ -624,8 +592,6 @@ print(pl4)
 #plot(try, select = 1) + l_dens(type = "cond") + l_fitLine() + l_ciLine()
 
 
-
-library(mgcViz)
 try <- getViz(gam_ssplines)
 pl1 <- plot(try, select = 1) + l_points(pch = 19, cex = 0.5) + l_fitLine(linetype = 1, col = 'blue')  +
   l_ciLine(colour = 4) + theme_get() + labs(y = c("f(suggested number of players)"), x = c("suggested number of players"))
@@ -636,41 +602,6 @@ print(pl2)
 pl3 <- plot(try, select = 3) + l_points(pch = 19, cex = 0.5) + l_fitLine(linetype = 1, col = 'blue')  +
   l_ciLine(colour = 4) + theme_get() + labs(y = c("f(playing time)"), x = c("playing time"))
 print(pl3)
-
-
-
-
-
-#### GAMlasso ####
-
-library(plsmselect)
-library(dbarts)
-category.indices <-  24:62
-games$X = makeModelMatrixFromDataFrame(games[, category.indices])
-gfit = gamlasso(average ~ X +
-                  s(year, bs="cr") +
-                  s(minage, bs="cr") +
-                  s(playingtime, bs="cr") +
-                  s(suggested_num_players, bs="cs"),
-                data=games,
-                seed=1)
-
-summary(gfit)
-
-
-
-games$X1 = makeModelMatrixFromDataFrame(data.frame(games[,'category.cluster.kmed']))
-gfit = gamlasso(average ~ X1 +
-                  s(year, bs="cr") +
-                  s(minage, bs="cr") +
-                  s(playingtime, bs="cr") +
-                  s(suggested_num_players, bs="cr"),
-                data=games,
-                seed=1)
-
-summary(gfit)
-summary(gfit$gam)
-summary(gfit$cv.glmnet)
 
 
 
