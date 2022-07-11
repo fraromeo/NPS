@@ -677,3 +677,16 @@ games %>%
 ##### Save File #####
 #write.csv(games, 'clusterized_games3.csv')
 
+games <-read.csv('clusterized_games3.csv')
+games$sum.col <- games$Wargame + games$World.War.II + games$Ancient
+games$WarAncient <- ifelse(games$sum.col > 0, 'Ancient + War', 'Other')
+x11()
+games %>%
+  ggplot(aes(x=WarAncient, y=average, fill=WarAncient))+
+  geom_boxplot() +
+  coord_flip() + 
+  xlab('') +
+  ggtitle("Boxplot of Average") +
+  theme_bw() + theme(legend.position="none", axis.text = element_text(size = 12), 
+                     axis.title = element_text(size = 14),
+                     plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"))
